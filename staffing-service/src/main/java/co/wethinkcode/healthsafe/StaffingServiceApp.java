@@ -2,12 +2,17 @@ package co.wethinkcode.healthsafe;
 
 import io.javalin.Javalin;
 
+import co.wethinkcode.healthsafe.service.StaffingHandler;
+
 public class StaffingServiceApp {
 
     public static void main(String[] args) {
+        StaffingHandler handler = new StaffingHandler();
         Javalin app = Javalin.create().start(7033);
 
         app.get("/health", ctx -> ctx.result("OK"));
+
+        app.get
 
         // TODO (Provides on-call schedules for doctors based on ward and status.)
         // Add domain endpoints for staffing-service here.

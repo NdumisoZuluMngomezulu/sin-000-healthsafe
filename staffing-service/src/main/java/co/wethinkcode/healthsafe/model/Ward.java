@@ -23,4 +23,6 @@ public class Ward {
     public void setWing(String wing){this.wing = wing;}
     public void setDept(String dep){this.department = dep;}
     public void setBed(String bed){this.available_beds = bed;}
+    @Override
+    public String toString(){return "This is ward is for " + department() + " on the " + getWing() + " wing.";}
 }
