@@ -15,10 +15,10 @@ public class CSVLoader {
 
     public String filePath = "/wards-outdated.csv";
     public String line = "";
+    public static List<Ward> ward_list = new ArrayList<>();
     public static Map<String, String> wing_department = new HashMap<>();
 
     public List<Ward> getWards() throws IOException {
-        List<Ward> wards = new ArrayList<>();
 
         InputStream inputStream = CSVLoader.class.getResourceAsStream(filePath);
 
@@ -31,11 +31,19 @@ public class CSVLoader {
 
             while ((line = reader.readLine()) != null) {
                 Ward ward = returnWard(line);
-                wards.add(ward);
+                ward_list.add(ward);
             }
         }
 
-        return wards;
+        return List.copyOf(ward_list);
+    }
+
+    public Ward getSpecificWard(String id){
+        for (Ward ward : CSVLoader.ward_list){
+            if (id.equals(ward.getId())){return ward;}
+        }
+
+        return null;
     }
 
     private Ward returnWard(String line) {

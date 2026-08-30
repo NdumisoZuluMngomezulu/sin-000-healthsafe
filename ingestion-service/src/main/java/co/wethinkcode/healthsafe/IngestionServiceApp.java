@@ -2,6 +2,7 @@ package co.wethinkcode.healthsafe;
 
 import co.wethinkcode.healthsafe.service.CSVLoader;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.io.IOException;
 
@@ -12,12 +13,13 @@ import io.javalin.Javalin;
 public class IngestionServiceApp {
 
     public static void main(String[] args) {
+        List<Ward> wards = new ArrayList<>();
         
         CSVLoader loader = new CSVLoader();
         try {
-            List<Ward> wards = loader.getWards();
+            wards = loader.getWards();
         } catch (IOException e) {
-            System.out.println("Could not load wards" + e.getMessage();)
+            System.out.println("Could not load wards" + e.getMessage());
         }
         
         Javalin app = Javalin.create().start(7030);
