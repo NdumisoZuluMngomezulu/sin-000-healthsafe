@@ -1,0 +1,55 @@
+doctor_id, Wing , specialty,doctor
+01, East Wing ,Cardiology,Palesa Maruping
+02,West Wing,paediatrics,Sibongokuhle Maseko
+03 ,east wing,Cardiology,Pumla Mdluli
+04,North Wing,Oncology,Mina Madlala
+05,East Wing,Paediatrics,Mvelo Mhlongo
+05,east wing ,PAEDIATRICS,Christian Mutuila
+06,South Wing,Radiology,Daniel Mayombo
+07,West Wing,cardiology,Samuel Otunola
+08,North Wing,Oncology,Zipho Kubheka
+09,North Wing,ICU,Thembeka Mahlangu
+10,South Wing,Maternity,Sibusiso Mngomezulu
+11,East Wing,Pediatrics,Nokukhanya Zulu
+12,west wing,Cardiology,Lethabo Tshidi
+13,North Wing,Oncology, Chukwuma Ajaegbu
+14,South Wing,radiology,Thando Xulu
+15,East Wing,ICU, ThembeLihle Mngomezulu
+16,West Wing ,Maternity,Zama Madonsela
+17,North wing,oncology,Ndumiso Zulu
+18, East Wing ,Cardiology,Love Daily
+19,West Wing,paediatrics,Amanda Madonsela
+20,east wing,Cardiology,David Nhancale
+21,North Wing,Oncology,John Piper
+22,East Wing,Paediatrics,Peter Manda
+23,east wing ,PAEDIATRICS,Busang Moshifa
+24,South Wing,Radiology,Sanele Vilakazi
+25,West Wing,cardiology,Doku Israel
+26,North Wing,Oncology,Steven Furtick
+27,North Wing,ICU,Avery Cocu
+28,South Wing,Maternity,Anele Mkhwanazi
+29,East Wing,Pediatrics,Hiroku Yuki
+30,west wing,Cardiology,Gideon Odoma
+31,North Wing,Oncology, Bill Ajaegbu
+32,South Wing,radiology,Wena Nawe
+33,East Wing,ICU, Gavin Ortlund
+34,West Wing ,Maternity,Kgotso Madonsela
+35,North wing,oncology,Alondwe Zulu
+36, East Wing ,Cardiology,Hallelujah Riot
+37,West Wing,paediatrics,Dorah Maseko
+38,east wing,Cardiology,Siya Mdluli
+39,North Wing,Oncology,Minah Micaku
+40,East Wing,Paediatrics,Donald Maguya
+41,east wing ,PAEDIATRICS,Christian Awezlia
+42,South Wing,Radiology,Daniel Pfizer
+43,West Wing,cardiology,Bradley Otunola
+44,North Wing,Oncology,Helmen Lazlo
+45,North Wing,ICU,Peter Marvel
+46,South Wing,Maternity,Vange Mkhonto
+47,East Wing,Pediatrics,Helen Letsoalo
+48,west wing,Cardiology,Darren Brand
+49,North Wing,Oncology, Matthew Vines
+50,South Wing,radiology,Lwandle Mthimkhulu
+51,East Wing,ICU, Sihle Mnguni
+52,West Wing ,Maternity,Awande Khumalo
+53,North wing,oncology,Jude Law

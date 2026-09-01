@@ -13,6 +13,8 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import co.wethinkcode.healthsafe.model.Ward;
+import co.wethinkcode.healthsafe.model.Doctor;
+import co.wethinkcode.healthsafe.model.Schedule;
 
 public class StaffingHandler {
     public static HttpClient client;
