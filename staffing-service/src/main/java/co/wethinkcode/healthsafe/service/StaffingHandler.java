@@ -6,6 +6,8 @@ import java.net.http.HttpResponse;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 
 import io.javalin.http.Context;
 
@@ -18,14 +20,16 @@ import co.wethinkcode.healthsafe.model.Schedule;
 
 public class StaffingHandler {
     public static HttpClient client;
-    public static String apiBaseUrl = "http://localHost:7030";
+    public static int alertLevel;
+    public static String ingestionApiUrl = "http://localhost:7030";
+    public static String alertServiceUrl = "http://localhost:7032";
     public static ObjectMapper objectMapper = new ObjectMapper();
-    public static List<Ward> wards = new ArrayList<>();
+    public static Map<Ward, Schedule> ward_schedule = new HashMap<>();
 
     public void getWards(Context ctx) {
         try {
             HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(apiBaseUrl))
+                .uri(URI.create(ingestionApiUrl))
                 .GET()
                 .build();
         
@@ -42,11 +46,11 @@ public class StaffingHandler {
         
     }
 
-    public void getWardById(Context ctx) {
+    public static void getWardById(Context ctx) {
         String id = ctx.pathParam("id");
         try {
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(apiBaseUrl +"/"+id))
+                    .uri(URI.create(ingestionApiUrl +"/"+id))
                     .GET()
                     .build();
             
@@ -59,6 +63,41 @@ public class StaffingHandler {
         } catch (Exception e) {
             System.out.println("Error " + e.getMessage());
         }
+    }
+
+    public void getAlertLevel() {
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(alertServiceUrl+"/alert-level"))
+                    .GET()
+                    .build();
+            
+            HttpResponse response = client.send(
+                        request, HttpResponse.BodyHandlers.ofString());
+            
+            StaffingHandler.alertLevel = objectMapper.readValue(response.body(), Integer.class);
+
+        } catch (Exception e) {
+            System.out.println("Error " + e.getMessage());
+        }
+    }
+
+    public static void getSchedule(Context ctx) {
+        Ward ward = ctx.bodyAsClass(Ward.class);
+
+        Schedule schedule = new Schedule(ward);
+
+        if (DataLoader.doctors.isEmpty()){
+            try {
+                DataLoader.loadDoctors();
+            } catch (Exception e) {
+                System.out.println("Error " + e.getMessage());
+            }  
+        }
+        ward_schedule.put(ward, schedule);
+
+        ctx.json(schedule);
+
     }
 }
 

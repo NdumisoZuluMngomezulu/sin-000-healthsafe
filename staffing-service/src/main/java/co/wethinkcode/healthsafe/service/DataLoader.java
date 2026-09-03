@@ -17,7 +17,7 @@ public class DataLoader {
     public String line = "";
     public static List<Doctor> doctors = new ArrayList<>();
 
-    public Map<Doctor, String> loadDoctors() throws IOException {
+    public static void loadDoctors() throws IOException {
         InputStream inputStream = DataLoader.class.getResourceAsStream(filePath);
         Map<Doctor, String> doc_dep_map = new HashMap<>();
 
@@ -34,8 +34,6 @@ public class DataLoader {
                 doc_dep_map.put(doc, doc.getSpecialty());
             }
         }
-
-        return doc_dep_map;
 
     }
 

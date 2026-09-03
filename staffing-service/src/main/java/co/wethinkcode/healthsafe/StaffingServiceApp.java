@@ -12,7 +12,9 @@ public class StaffingServiceApp {
 
         app.get("/health", ctx -> ctx.result("OK"));
 
-        app.get
+        app.get("/ward/{id}", StaffingHandler::getWardById);
+
+        app.get("/ward/schedule", StaffingHandler::getSchedule);
 
         // TODO (Provides on-call schedules for doctors based on ward and status.)
         // Add domain endpoints for staffing-service here.
