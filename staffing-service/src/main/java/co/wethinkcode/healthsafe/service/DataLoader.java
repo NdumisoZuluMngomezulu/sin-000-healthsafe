@@ -4,17 +4,16 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Map;
 import java.util.List;
+import java.util.Map;
 
 import co.wethinkcode.healthsafe.model.Doctor;
 
 public class DataLoader {
-    public String filePath = "/doctors.csv";
-    public String line = "";
+    public static String filePath = "/doctors.csv";
+    public static String line = "";
     public static List<Doctor> doctors = new ArrayList<>();
 
     public static void loadDoctors() throws IOException {
@@ -37,7 +36,7 @@ public class DataLoader {
 
     }
 
-    public Doctor getDoctor(String line){
+    public static Doctor getDoctor(String line){
         if (!line.contains("doctor_id")) {
             String[] array = line.split(",");
             Doctor doc = new Doctor(Integer.parseInt(array[0]), array[3], array[2]);
