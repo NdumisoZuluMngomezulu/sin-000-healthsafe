@@ -1,19 +1,17 @@
 package co.wethinkcode.healthsafe;
 
-import co.wethinkcode.healthsafe.service.CSVLoader;
-
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.io.IOException;
 
 import co.wethinkcode.healthsafe.model.Ward;
-
+import co.wethinkcode.healthsafe.service.CSVLoader;
 import io.javalin.Javalin;
 
 public class IngestionServiceApp {
+    public static List<Ward> wards = new ArrayList<>();
 
     public static void main(String[] args) {
-        List<Ward> wards = new ArrayList<>();
         
         CSVLoader loader = new CSVLoader();
         try {

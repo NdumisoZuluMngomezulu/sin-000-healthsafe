@@ -15,10 +15,10 @@ public class DataLoader {
     public static String filePath = "/doctors.csv";
     public static String line = "";
     public static List<Doctor> doctors = new ArrayList<>();
+    public static Map<Doctor, String> doc_dep_map = new HashMap<>();
 
     public static void loadDoctors() throws IOException {
         InputStream inputStream = DataLoader.class.getResourceAsStream(filePath);
-        Map<Doctor, String> doc_dep_map = new HashMap<>();
 
         if (inputStream == null){
             throw new IOException("Could not find resource: " + filePath);

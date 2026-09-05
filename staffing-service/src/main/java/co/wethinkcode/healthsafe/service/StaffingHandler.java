@@ -19,21 +19,27 @@ import co.wethinkcode.healthsafe.model.Doctor;
 import co.wethinkcode.healthsafe.model.Schedule;
 
 public class StaffingHandler {
-    public static HttpClient client;
+    public static HttpClient client = HttpClient.newHttpClient();
     public static int alertLevel;
     public static String ingestionApiUrl = "http://localhost:7030";
     public static String alertServiceUrl = "http://localhost:7032";
     public static ObjectMapper objectMapper = new ObjectMapper();
     public static Map<Ward, Schedule> ward_schedule = new HashMap<>();
 
+    public StaffingHandler(){}
+
+    public static void main(String[] args) {
+        System.out.println("Hi");
+    }
+
     public void getWards(Context ctx) {
         try {
             HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(ingestionApiUrl))
+                .uri(URI.create(ingestionApiUrl + "/"))
                 .GET()
                 .build();
         
-            HttpResponse response = client.send(
+            HttpResponse<String> response = client.send(
                 request, HttpResponse.BodyHandlers.ofString());
             
             List<Ward> wards = objectMapper.readValue(response.body(), new TypeReference<List<Ward>>() {});
@@ -54,7 +60,7 @@ public class StaffingHandler {
                     .GET()
                     .build();
             
-            HttpResponse response = client.send(
+            HttpResponse<String> response = client.send(
                 request, HttpResponse.BodyHandlers.ofString());
             
             Ward ward = objectMapper.readValue(response.body(), Ward.class);
@@ -72,7 +78,7 @@ public class StaffingHandler {
                     .GET()
                     .build();
             
-            HttpResponse response = client.send(
+            HttpResponse<String> response = client.send(
                         request, HttpResponse.BodyHandlers.ofString());
             
             StaffingHandler.alertLevel = objectMapper.readValue(response.body(), Integer.class);
