@@ -9,14 +9,17 @@ import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
 
+import javax.jms.*;
+
+import org.w3c.dom.Text;
+
 import io.javalin.http.Context;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import co.wethinkcode.healthsafe.model.Ward;
-import co.wethinkcode.healthsafe.model.Doctor;
-import co.wethinkcode.healthsafe.model.Schedule;
+import co.wethinkcode.healthsafe.mq.MqConfig;
+import co.wethinkcode.healthsafe.model.*;
 
 public class StaffingHandler {
     public static HttpClient client = HttpClient.newHttpClient();
@@ -27,10 +30,6 @@ public class StaffingHandler {
     public static Map<Ward, Schedule> ward_schedule = new HashMap<>();
 
     public StaffingHandler(){}
-
-    public static void main(String[] args) {
-        System.out.println("Hi");
-    }
 
     public void getWards(Context ctx) {
         try {
@@ -101,34 +100,52 @@ public class StaffingHandler {
             }  
         }
         ward_schedule.put(ward, schedule);
+        StaffingEvent event = new StaffingEvent("SCHEDULE CREATED", schedule);
+        
+        publishToStaffingQueue(event);
 
-        ctx.json(schedule);
+        ctx.status(200).json(Map.of("status","Schedule passed"));
+    }
 
+    public static void publishToStaffingQueue(StaffingEvent event) {
+        try (Connection connection = MqConfig.createConnection()){
+            Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
+
+            Destination destination = session.createQueue("staffing-events-queue");
+            MessageProducer producer = session.createProducer(destination);
+
+            String jsonPayload = MqConfig.mapper.writeValueAsString(event);
+            TextMessage message = session.createTextMessage(jsonPayload);
+
+            producer.send(message);
+            System.out.println("Message queue has sent event: " + event.getEventType() + " to staffing event queue");
+        } catch (Exception e){
+            System.err.println("MessageQueue failed to route queue");
+        }
     }
 }
 
-// public static String fetchData(String apiBaseUrl, String path) {
-//         try {
-//             HttpRequest request = HttpRequest.newBuilder()
-//                 .uri(URI.create(apiBaseUrl + path))
-//                 .GET()
-//                 .build();
+// publishToStaffingQueue(event);
+
+//         ctx.status(200).json(Map.of("status", "Cancellation notice broadcasted"));
+//     }
+
+//     // Unified helper method handling ActiveMQ transmission
+//     private static void publishToStaffingQueue(StaffingEvent event) {
+//         try (Connection connection = MqConfig.createConnection();
+//              Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE)) {
             
-//java.net.http.HttpResponse<String> response = httpClient.send(
-// request, java.net.http.HttpResponse.BodyHandlers.ofString()); 
-            
-//             if (response.statusCode() == 200) { 
-//                 String worldData = response.body();
-//                 System.out.println("=====WORLD DATA=====");
-//                 System.out.println(path + "' successfully restored via API."); 
-//                 return worldData; 
-//             } else { 
-//                 System.out.println("API Error [" + response.statusCode() + "]: World configuration not found."); 
-//                 return "error"; 
-//             } 
-//         } catch (Exception e) { 
-//             System.out.println("Failed to forward restore command to API: " + e.getMessage()); 
-//             // Crucial fix: return a fallback value or rethrow the exception here
-//             return "error"; 
-//         } 
+//             // Both actions route directly through this single destination pipeline
+//             Destination destination = session.createQueue("staffing.events.queue");
+//             MessageProducer producer = session.createProducer(destination);
+
+//             String jsonPayload = MqConfig.mapper.writeValueAsString(event);
+//             TextMessage message = session.createTextMessage(jsonPayload);
+
+//             producer.send(message);
+//             System.out.println("[MQ] Sent event [" + event.getEventType() + "] to staffing.events.queue");
+
+//         } catch (Exception e) {
+//             System.err.println("[MQ Error] Failed to route staffing event: " + e.getMessage());
+//         }
 //     }

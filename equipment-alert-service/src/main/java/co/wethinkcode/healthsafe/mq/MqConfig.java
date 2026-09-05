@@ -14,7 +14,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 public final class MqConfig {
 
     public static final String BROKER_URL = "tcp://localhost:61616";
-    public static final String TOPIC = "staffing-events-topic";
+    public static final String TOPIC = "equipment-events-topic";
     public static final ObjectMapper mapper = new ObjectMapper();
     public static ActiveMQConnectionFactory factory;
 
