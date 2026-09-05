@@ -11,7 +11,6 @@ import java.util.Map;
 
 import javax.jms.*;
 
-import org.w3c.dom.Text;
 
 import io.javalin.http.Context;
 
@@ -108,8 +107,9 @@ public class StaffingHandler {
     }
 
     public static void publishToStaffingQueue(StaffingEvent event) {
-        try (Connection connection = MqConfig.createConnection()){
-            Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
+        try (Connection connection = MqConfig.createConnection();
+             Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE)){
+            
 
             Destination destination = session.createQueue("staffing-events-queue");
             MessageProducer producer = session.createProducer(destination);
