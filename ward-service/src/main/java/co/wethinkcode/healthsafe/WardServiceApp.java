@@ -13,6 +13,12 @@ public class WardServiceApp {
 
         app.get("/health", ctx -> ctx.result("OK"));
 
+        app.get("/equipment", WardServiceHandler::publishToWardQueue);
+
+        app.get("/wards", WardServiceHandler::getWards);
+
+        app.get("/departments", WardServiceHandler::departments);
+
         // TODO (Provides lists of wards and departments.)
         // Add domain endpoints for ward-service here.
         subscribeToStaffingQueue();

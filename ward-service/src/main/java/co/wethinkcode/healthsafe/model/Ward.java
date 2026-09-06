@@ -11,6 +11,7 @@ public class Ward {
     private List<Map<String, Object>> assignedDoctors;
     private int alertLevel;
     private List<Equipment> equipment_list;
+    private List<Equipment> damaged_equipment;
 
     public Ward(){}
 
@@ -31,6 +32,15 @@ public class Ward {
     public void setDept(String dep){this.department = dep;}
     public void setAlert(int level){this.alertLevel = level;}
     public void setDoctors(List<Map<String, Object>> doctors){this.assignedDoctors = doctors;}
+    public void checkFaultyEquipment(){
+        for (Equipment equipment : this.equipment_list){
+            if (equipment.isDamaged()){
+                this.damaged_equipment.add(equipment);
+                this.equipment_list.remove(equipment);
+            }
+        }
+    }
+    public List<Equipment> faulty_equipment(){return this.damaged_equipment;}
     @Override
     public String toString(){return "This is ward is for " + department() + " on the " + getWing() + " wing.";}
 }

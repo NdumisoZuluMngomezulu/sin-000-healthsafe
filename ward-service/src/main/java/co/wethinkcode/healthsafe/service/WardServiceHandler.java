@@ -6,6 +6,7 @@ import java.net.http.HttpResponse;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.HashMap;
 import java.util.Map;
 
 import javax.jms.Connection;
@@ -24,12 +25,13 @@ import co.wethinkcode.healthsafe.model.Ward;
 import co.wethinkcode.healthsafe.mq.MqConfig;
 
 public class WardServiceHandler {
-    public static List<Ward> wards = new ArrayList<>();
+    public static List<Ward> wards_list = new ArrayList<>();
     public static HttpClient client = HttpClient.newHttpClient();
     public static ObjectMapper objectMapper = new ObjectMapper();
     public static String ingestionApiUrl = "http://localhost:7030";
+    public static Map<String, List<Equipment>> faulty_equipment = new HashMap<>();
 
-    public void getWards(Context ctx) {
+    public static void getWards(Context ctx) {
         try {
             HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(ingestionApiUrl + "/"))
@@ -49,18 +51,28 @@ public class WardServiceHandler {
         
     }
 
-    public static void publishToWardQueue(Equipment equipment){
+    public static void departments(Context ctx){
+        List<String> departments = new ArrayList<>();
+        for (Ward ward : WardServiceHandler.wards_list){
+            departments.add(ward.department());
+        }
+        String deps = String.join(",",departments);
+        ctx.json(deps);
+    }
+
+    public static void publishToWardQueue(Context ctx){
         try (Connection connection = MqConfig.createConnection();
               Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE)) {
             
             Destination destination = session.createQueue("ward-service-queue");
             MessageProducer producer = session.createProducer(destination);
 
-            String jsonPayload = MqConfig.mapper.writeValueAsString(equipment);
+            String jsonPayload = MqConfig.mapper.writeValueAsString(WardServiceHandler.faulty_equipment);
             TextMessage message = session.createTextMessage(jsonPayload);
 
             producer.send(message);
-            System.out.println("MQ has sent event " + equipment.getName() + " details to Equipment service");
+            System.out.println("MQ has sent event " + " details to Equipment service");
+            ctx.status(200).json(Map.of("status","Passed faulty equipment"));
 
             
         } catch (Exception e) {
@@ -84,15 +96,19 @@ public class WardServiceHandler {
             Ward ward = new Ward(id, wing, department);
             ward.setDoctors(assignedDoctors);
             ward.setAlert(alertLevel);
-            WardServiceHandler.wards.add(ward);
+            WardServiceHandler.wards_list.add(ward);
 
         } catch (Exception e) {
             System.err.println("Could not process message");
         }
     }
 
-    public boolean checkFaultyEquipment(){
-        
+    public void checkFaultyEquipment(){
+        for (Ward ward : WardServiceHandler.wards_list){
+            if (!ward.faulty_equipment().isEmpty()){
+                WardServiceHandler.faulty_equipment.put(ward.getId(), ward.faulty_equipment());
+            }
+        }
     }
 }
 /*
