@@ -30,25 +30,6 @@ public class StaffingHandler {
 
     public StaffingHandler(){}
 
-    public void getWards(Context ctx) {
-        try {
-            HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(ingestionApiUrl + "/"))
-                .GET()
-                .build();
-        
-            HttpResponse<String> response = client.send(
-                request, HttpResponse.BodyHandlers.ofString());
-            
-            List<Ward> wards = objectMapper.readValue(response.body(), new TypeReference<List<Ward>>() {});
-        
-            ctx.json(wards);
-
-        } catch (Exception e) {
-            System.out.println("Error " + e.getMessage());
-        }
-        
-    }
 
     public static void getWardById(Context ctx) {
         String id = ctx.pathParam("id");
@@ -67,6 +48,26 @@ public class StaffingHandler {
         } catch (Exception e) {
             System.out.println("Error " + e.getMessage());
         }
+    }
+
+    public void getWards(Context ctx) {
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(ingestionApiUrl + "/"))
+                .GET()
+                .build();
+        
+            HttpResponse<String> response = client.send(
+                request, HttpResponse.BodyHandlers.ofString());
+            
+            List<Ward> wards = objectMapper.readValue(response.body(), new TypeReference<List<Ward>>() {});
+        
+            ctx.json(wards);
+
+        } catch (Exception e) {
+            System.out.println("Error " + e.getMessage());
+        }
+        
     }
 
     public void getAlertLevel() {

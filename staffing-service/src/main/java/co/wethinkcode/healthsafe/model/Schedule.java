@@ -6,6 +6,7 @@ import java.util.Map;
 
 public class Schedule {
     private Ward ward;
+    private String wing;
     private String department;
     private List<Doctor> assignedDoctors;
     private int alertLevel;
@@ -16,6 +17,7 @@ public class Schedule {
     }
 
     public Ward ward(){return this.ward;}
+    public String wing(){return this.wing;}
     public String department(){return department;}
     public List<Doctor> doctors(){return List.copyOf(assignedDoctors);}
     public void assignDoctors(List<Doctor> doctors) {
