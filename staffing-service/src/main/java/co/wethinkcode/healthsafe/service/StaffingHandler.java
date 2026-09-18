@@ -1,151 +1,152 @@
 package co.wethinkcode.healthsafe.service;
 
+import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.net.URI;
-import java.util.List;
-import java.util.HashMap;
+import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
-import javax.jms.*;
-
+import javax.jms.Connection;
+import javax.jms.Destination;
+import javax.jms.MessageProducer;
+import javax.jms.Session;
+import javax.jms.TextMessage;
 
 import io.javalin.http.Context;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import co.wethinkcode.healthsafe.mq.MqConfig;
-import co.wethinkcode.healthsafe.model.*;
+import co.wethinkcode.healthsafe.model.Schedule;
+import co.wethinkcode.healthsafe.model.StaffingEvent;
+import co.wethinkcode.healthsafe.model.Ward;
 
 public class StaffingHandler {
-    public static HttpClient client = HttpClient.newHttpClient();
-    public static int alertLevel;
-    public static String ingestionApiUrl = "http://localhost:7030";
-    public static String alertServiceUrl = "http://localhost:7032";
-    public static ObjectMapper objectMapper = new ObjectMapper();
-    public static Map<Ward, Schedule> ward_schedule = new HashMap<>();
 
-    public StaffingHandler(){}
+    private static final HttpClient client = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(5))
+            .build();
+    private static final ObjectMapper objectMapper = new ObjectMapper();
 
+    private static final String wardServiceUrl = "http://localhost:7031";
+    private static final String alertServiceUrl = "http://localhost:7032";
 
-    public static void getWardById(Context ctx) {
-        String id = ctx.pathParam("id");
-        try {
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(ingestionApiUrl +"/"+id))
-                    .GET()
-                    .build();
-            
-            HttpResponse<String> response = client.send(
-                request, HttpResponse.BodyHandlers.ofString());
-            
-            Ward ward = objectMapper.readValue(response.body(), Ward.class);
+    // wardId -> most recently generated schedule.
+    public static final Map<String, Schedule> wardSchedule = new ConcurrentHashMap<>();
 
-            ctx.json(ward);
-        } catch (Exception e) {
-            System.out.println("Error " + e.getMessage());
-        }
+    public StaffingHandler() {
     }
 
-    public void getWards(Context ctx) {
-        try {
-            HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(ingestionApiUrl + "/"))
-                .GET()
-                .build();
-        
-            HttpResponse<String> response = client.send(
-                request, HttpResponse.BodyHandlers.ofString());
-            
-            List<Ward> wards = objectMapper.readValue(response.body(), new TypeReference<List<Ward>>() {});
-        
-            ctx.json(wards);
+    /**
+     * Generates (or refreshes) the on-call schedule for a ward:
+     *  1. validate the ward via ward-service (404 passthrough)
+     *  2. read the current Emergency Status via alert-level-service
+     *  3. size the schedule to that status and broadcast it on
+     *     staffing-events-topic (stage 3) instead of ward-service polling us.
+     */
+    public static void createSchedule(Context ctx) {
+        String wardId = ctx.pathParam("wardId").toUpperCase();
 
-        } catch (Exception e) {
-            System.out.println("Error " + e.getMessage());
+        Ward ward = fetchWard(ctx, wardId);
+        if (ward == null) {
+            return; // fetchWard already wrote the error response
         }
-        
-    }
 
-    public void getAlertLevel() {
-        try {
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(alertServiceUrl+"/alert-level"))
-                    .GET()
-                    .build();
-            
-            HttpResponse<String> response = client.send(
-                        request, HttpResponse.BodyHandlers.ofString());
-            
-            StaffingHandler.alertLevel = objectMapper.readValue(response.body(), Integer.class);
+        int alertLevel = fetchAlertLevel();
 
-        } catch (Exception e) {
-            System.out.println("Error " + e.getMessage());
-        }
-    }
-
-    public static void getSchedule(Context ctx) {
-        Ward ward = ctx.bodyAsClass(Ward.class);
-
-        Schedule schedule = new Schedule(ward);
-
-        if (DataLoader.doctors.isEmpty()){
+        if (DataLoader.doctors.isEmpty()) {
             try {
                 DataLoader.loadDoctors();
             } catch (Exception e) {
-                System.out.println("Error " + e.getMessage());
-            }  
+                System.out.println("staffing-service: could not load doctors.csv - " + e.getMessage());
+            }
         }
-        ward_schedule.put(ward, schedule);
-        StaffingEvent event = new StaffingEvent("SCHEDULE CREATED", schedule);
-        
-        publishToStaffingQueue(event);
 
-        ctx.status(200).json(Map.of("status","Schedule passed"));
+        Schedule schedule = new Schedule(ward, alertLevel, DataLoader.doctors);
+        wardSchedule.put(wardId, schedule);
+
+        StaffingEvent event = new StaffingEvent("SCHEDULE_UPDATED", schedule);
+        publishToStaffingTopic(event);
+
+        ctx.status(200).json(schedule);
     }
 
-    public static void publishToStaffingQueue(StaffingEvent event) {
-        try (Connection connection = MqConfig.createConnection();
-             Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE)){
-            
+    public static void getSchedule(Context ctx) {
+        String wardId = ctx.pathParam("wardId").toUpperCase();
+        Schedule schedule = wardSchedule.get(wardId);
+        if (schedule == null) {
+            ctx.status(404).json(Map.of("error", "no schedule generated yet for ward " + wardId));
+            return;
+        }
+        ctx.json(schedule);
+    }
 
-            Destination destination = session.createQueue("staffing-events-queue");
+    /** Fetches a ward from ward-service, writing a matching error response on failure. */
+    private static Ward fetchWard(Context ctx, String wardId) {
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(wardServiceUrl + "/wards/" + wardId))
+                    .GET()
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() == 404) {
+                ctx.status(404).json(Map.of("error", "unknown ward " + wardId));
+                return null;
+            }
+            if (response.statusCode() != 200) {
+                ctx.status(502).json(Map.of("error", "ward-service returned " + response.statusCode()));
+                return null;
+            }
+
+            return objectMapper.readValue(response.body(), Ward.class);
+        } catch (Exception e) {
+            ctx.status(502).json(Map.of("error", "could not reach ward-service: " + e.getMessage()));
+            return null;
+        }
+    }
+
+    /** Reads the current Emergency Status; defaults to 1 (one on-call doctor) if unreachable. */
+    private static int fetchAlertLevel() {
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(alertServiceUrl + "/alert-level"))
+                    .GET()
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            Map<?, ?> body = objectMapper.readValue(response.body(), Map.class);
+            Object level = body.get("level");
+            if (level instanceof Number) {
+                return ((Number) level).intValue();
+            }
+            return 1;
+        } catch (Exception e) {
+            System.out.println("staffing-service: could not reach alert-level-service ("
+                    + e.getMessage() + ") - defaulting to alert level 1");
+            return 1;
+        }
+    }
+
+    private static void publishToStaffingTopic(StaffingEvent event) {
+        try (Connection connection = MqConfig.createConnection()) {
+            Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
+
+            Destination destination = session.createTopic(MqConfig.TOPIC);
             MessageProducer producer = session.createProducer(destination);
 
             String jsonPayload = MqConfig.mapper.writeValueAsString(event);
             TextMessage message = session.createTextMessage(jsonPayload);
 
             producer.send(message);
-            System.out.println("Message queue has sent event: " + event.getEventType() + " to staffing event queue");
-        } catch (Exception e){
-            System.err.println("MessageQueue failed to route queue");
+            System.out.println("staffing-service: published event " + event.getEventType()
+                    + " to " + MqConfig.TOPIC);
+        } catch (Exception e) {
+            System.err.println("staffing-service: failed to publish staffing event - " + e.getMessage()
+                    + ". Is the broker up? (`cd common && docker compose up -d`)");
         }
     }
 }
-
-// publishToStaffingQueue(event);
-
-//         ctx.status(200).json(Map.of("status", "Cancellation notice broadcasted"));
-//     }
-
-//     // Unified helper method handling ActiveMQ transmission
-//     private static void publishToStaffingQueue(StaffingEvent event) {
-//         try (Connection connection = MqConfig.createConnection();
-//              Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE)) {
-            
-//             // Both actions route directly through this single destination pipeline
-//             Destination destination = session.createQueue("staffing.events.queue");
-//             MessageProducer producer = session.createProducer(destination);
-
-//             String jsonPayload = MqConfig.mapper.writeValueAsString(event);
-//             TextMessage message = session.createTextMessage(jsonPayload);
-
-//             producer.send(message);
-//             System.out.println("[MQ] Sent event [" + event.getEventType() + "] to staffing.events.queue");
-
-//         } catch (Exception e) {
-//             System.err.println("[MQ Error] Failed to route staffing event: " + e.getMessage());
-//         }
-//     }

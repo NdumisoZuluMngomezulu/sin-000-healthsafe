@@ -2,11 +2,13 @@ package co.wethinkcode.healthsafe;
 
 import javax.jms.Connection;
 import javax.jms.Destination;
+import javax.jms.JMSException;
 import javax.jms.MessageConsumer;
 import javax.jms.Session;
 import javax.jms.TextMessage;
 
 import co.wethinkcode.healthsafe.mq.MqConfig;
+import co.wethinkcode.healthsafe.service.EquipmentAlertHandler;
 import io.javalin.Javalin;
 
 public class EquipmentAlertServiceApp {
@@ -16,42 +18,48 @@ public class EquipmentAlertServiceApp {
 
         app.get("/health", ctx -> ctx.result("OK"));
 
-        // TODO (Uses a Queue to guarantee delivery of critical medical equipment failure alerts.)
-        // Mechanism: ActiveMQ Queue (guaranteed delivery)
+        // All equipment failure alerts received so far - handy for
+        // confirming end-to-end delivery without watching the broker console.
+        app.get("/alerts", EquipmentAlertHandler::listAlerts);
+
+        subscribeToWardQueue();
     }
 
-    private static void subscribeToWardQueue(){
+    private static void subscribeToWardQueue() {
         Thread listenerThread = new Thread(() -> {
             try {
-                //connect to active mq
                 Connection connection = MqConfig.createConnection();
-                Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
+                // CLIENT_ACKNOWLEDGE: only acknowledge a message once we've
+                // successfully processed it, so a failure/crash leaves it on
+                // the queue to be redelivered - the guaranteed-delivery
+                // contract for equipment-failure-queue.
+                Session session = connection.createSession(false, Session.CLIENT_ACKNOWLEDGE);
 
-                Destination destination = session.createQueue("ward-service-queue");
+                Destination destination = session.createQueue(MqConfig.QUEUE);
                 MessageConsumer consumer = session.createConsumer(destination);
-
-                System.out.println("MQ successfully listening to ward-service-queue");
 
                 consumer.setMessageListener(message -> {
                     try {
-                        if (message instanceof TextMessage) {
-                            System.out.println("got it");
+                        if (message instanceof TextMessage textMessage) {
+                            EquipmentAlertHandler.handle(textMessage.getText());
                         }
-                    } catch (Exception e){
-                        System.out.println("Failed to process message");
+                        message.acknowledge();
+                    } catch (Exception e) {
+                        System.err.println("equipment-alert-service: failed to process alert, "
+                                + "leaving it unacknowledged for redelivery - " + e.getMessage());
                     }
                 });
 
-            } catch (Exception e){
-                System.out.println("Failed to process message");
+                connection.start();
+                System.out.println("equipment-alert-service: listening on queue " + MqConfig.QUEUE);
+            } catch (JMSException e) {
+                System.err.println("equipment-alert-service: could not connect to broker ("
+                        + MqConfig.BROKER_URL + ") - " + e.getMessage()
+                        + ". Start it with `cd common && docker compose up -d`.");
             }
-        });
+        }, "equipment-queue-listener");
 
+        listenerThread.setDaemon(true);
         listenerThread.start();
+    }
 }
-}
-
-
-
-// MQ TODO: consumes ActiveMQ queue MqConfig.QUEUE at MqConfig.BROKER_URL (see co.wethinkcode.healthsafe.mq.MqConfig)
-// Producer: ward-service publishes here when it detects an equipment failure on one of its wards.

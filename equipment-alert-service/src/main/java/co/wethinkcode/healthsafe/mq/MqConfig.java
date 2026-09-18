@@ -7,14 +7,18 @@ import javax.jms.JMSException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
- * Shared by every producer/consumer service that talks to the "staffing-events-topic"
- * ActiveMQ topic. Duplicated into each participating service's own source tree,
- * since these are independent Maven projects with no shared parent pom.
+ * Shared broker config, duplicated into every participating service's own
+ * source tree since these are independent Maven projects with no shared
+ * parent pom.
+ *
+ * QUEUE: equipment-failure-queue - ward-service publishes here when it
+ * detects an equipment failure; this service is the guaranteed-delivery
+ * consumer.
  */
 public final class MqConfig {
 
     public static final String BROKER_URL = "tcp://localhost:61616";
-    public static final String TOPIC = "equipment-events-topic";
+    public static final String QUEUE = "equipment-failure-queue";
     public static final ObjectMapper mapper = new ObjectMapper();
     public static ActiveMQConnectionFactory factory;
 
@@ -22,13 +26,12 @@ public final class MqConfig {
     }
 
     static {
-        // Initialize the ActiveMQ Factory
         factory = new ActiveMQConnectionFactory(BROKER_URL);
     }
 
     public static Connection createConnection() throws JMSException {
         Connection connection = factory.createConnection();
-        connection.start(); //always start the connection before returning
+        connection.start();
         return connection;
     }
 }

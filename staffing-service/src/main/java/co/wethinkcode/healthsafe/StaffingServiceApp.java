@@ -7,18 +7,18 @@ import co.wethinkcode.healthsafe.service.StaffingHandler;
 public class StaffingServiceApp {
 
     public static void main(String[] args) {
-        StaffingHandler handler = new StaffingHandler();
+        new StaffingHandler();
         Javalin app = Javalin.create().start(7033);
 
         app.get("/health", ctx -> ctx.result("OK"));
 
-        app.get("/ward/{id}", StaffingHandler::getWardById);
+        // Generates/refreshes the on-call schedule for a ward: validates the
+        // ward via ward-service, reads the current Emergency Status via
+        // alert-level-service, then broadcasts the result on
+        // staffing-events-topic (stage 3).
+        app.post("/schedule/{wardId}", StaffingHandler::createSchedule);
 
-        app.get("/ward/schedule", StaffingHandler::getSchedule);
-
-        // TODO (Provides on-call schedules for doctors based on ward and status.)
-        // Add domain endpoints for staffing-service here.
+        // Returns the most recently generated schedule for a ward.
+        app.get("/schedule/{wardId}", StaffingHandler::getSchedule);
     }
 }
-
-// MQ TODO: publishes to ActiveMQ topic MqConfig.TOPIC at MqConfig.BROKER_URL (see co.wethinkcode.healthsafe.mq.MqConfig)

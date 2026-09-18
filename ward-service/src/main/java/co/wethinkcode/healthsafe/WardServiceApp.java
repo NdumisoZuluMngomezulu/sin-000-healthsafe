@@ -1,7 +1,13 @@
 package co.wethinkcode.healthsafe;
 
+import javax.jms.Connection;
+import javax.jms.Destination;
+import javax.jms.JMSException;
+import javax.jms.MessageConsumer;
+import javax.jms.Session;
+import javax.jms.TextMessage;
+
 import io.javalin.Javalin;
-import javax.jms.*;
 
 import co.wethinkcode.healthsafe.mq.MqConfig;
 import co.wethinkcode.healthsafe.service.WardServiceHandler;
@@ -9,83 +15,53 @@ import co.wethinkcode.healthsafe.service.WardServiceHandler;
 public class WardServiceApp {
 
     public static void main(String[] args) {
+        // Populate our ward/department list from ingestion-service before serving.
+        WardServiceHandler.loadWardsFromIngestion();
+
         Javalin app = Javalin.create().start(7031);
 
         app.get("/health", ctx -> ctx.result("OK"));
 
-        app.get("/equipment", WardServiceHandler::publishToWardQueue);
-
         app.get("/wards", WardServiceHandler::getWards);
-
+        app.get("/wards/{id}", WardServiceHandler::getWardById);
         app.get("/departments", WardServiceHandler::departments);
 
-        // TODO (Provides lists of wards and departments.)
-        // Add domain endpoints for ward-service here.
-        subscribeToStaffingQueue();
+        app.post("/wards/{id}/equipment", WardServiceHandler::reportEquipment);
+        app.get("/wards/{id}/equipment", WardServiceHandler::getEquipment);
+
+        // Stage 3: react to staffing-service's broadcasts instead of polling it.
+        subscribeToStaffingTopic();
     }
 
-    private static void subscribeToStaffingQueue() {
+    private static void subscribeToStaffingTopic() {
         Thread listenerThread = new Thread(() -> {
             try {
-                //connection to active mq
                 Connection connection = MqConfig.createConnection();
                 Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
 
-                Destination destination = session.createQueue("staffing-events-queue");
+                Destination destination = session.createTopic(MqConfig.TOPIC);
                 MessageConsumer consumer = session.createConsumer(destination);
-                
-                System.out.println("MQ successfully listening to staffing events");
-                //event driven callback listener
+
                 consumer.setMessageListener(message -> {
                     try {
-                        if (message instanceof TextMessage) {
-
-                            WardServiceHandler.processSchedule((TextMessage) message);
+                        if (message instanceof TextMessage textMessage) {
+                            WardServiceHandler.applyStaffingEvent(textMessage.getText());
                         }
                     } catch (Exception e) {
-                        System.out.println("Failed to process message");
+                        System.err.println("ward-service: failed to process staffing event - " + e.getMessage());
                     }
                 });
-                //start connection
-                connection.start();
-                System.out.println("MQ successfully listening on staffing-events-queue");
-            } catch (JMSException e){
-                System.out.println("sdcsd");
-            }
-        });
 
+                connection.start();
+                System.out.println("ward-service: listening on topic " + MqConfig.TOPIC);
+            } catch (JMSException e) {
+                System.err.println("ward-service: could not connect to broker ("
+                        + MqConfig.BROKER_URL + ") - " + e.getMessage()
+                        + ". Start it with `cd common && docker compose up -d`.");
+            }
+        }, "staffing-topic-listener");
+
+        listenerThread.setDaemon(true);
         listenerThread.start();
     }
 }
-
-
-// MQ TODO: subscribes to ActiveMQ topic MqConfig.TOPIC at MqConfig.BROKER_URL (see co.wethinkcode.healthsafe.mq.MqConfig)
-// MQ TODO: publishes to ActiveMQ queue MqConfig.QUEUE when it detects an equipment failure on one of its wards.
-
-/*
-Map<String, Object> wardMap = (Map<String, Object>) scheduleMap.get("ward");
-String wardId = null; 
-if (wardMap != null) {
-    // Adapt this field name to whatever your specific Ward model properties are named
-    wardId = (String) wardMap.get("id"); 
-}
-
-// 4. Extract the nested list of 'assignedDoctors'
-List<Map<String, Object>> doctorsList = (List<Map<String, Object>>) scheduleMap.get("assignedDoctors");
-
-System.out.println("\n[Ward Service] --- New Schedule Event Interpreted ---");
-System.out.println("Target Ward ID: " + wardId);
-System.out.println("Department:     " + department);
-System.out.println("Alert Level:    " + alertLevel);
-System.out.println("Assigned Doctor Details:");
-
-if (doctorsList != null) {
-    for (Map<String, Object> doctor : doctorsList) {
-        // Unpack individual fields from each doctor object block
-        String doctorName = (String) doctor.get("name");
-        String specialty = (String) doctor.get("specialty");
-        System.out.println(" -> Doctor: " + doctorName + " (" + specialty + ")");
-    }
-        
-}
-*/

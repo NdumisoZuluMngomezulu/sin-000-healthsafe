@@ -1,22 +1,26 @@
 package co.wethinkcode.healthsafe.service;
 
+import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.net.URI;
+import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.HashMap;
 import java.util.Map;
+import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
 
 import javax.jms.Connection;
+import javax.jms.DeliveryMode;
 import javax.jms.Destination;
 import javax.jms.MessageProducer;
 import javax.jms.Session;
 import javax.jms.TextMessage;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.javalin.http.Context;
 
@@ -25,122 +29,178 @@ import co.wethinkcode.healthsafe.model.Ward;
 import co.wethinkcode.healthsafe.mq.MqConfig;
 
 public class WardServiceHandler {
-    public static List<Ward> wards_list = new ArrayList<>();
-    public static HttpClient client = HttpClient.newHttpClient();
-    public static ObjectMapper objectMapper = new ObjectMapper();
-    public static String ingestionApiUrl = "http://localhost:7030";
-    public static Map<String, List<Equipment>> faulty_equipment = new HashMap<>();
 
-    public static void getWards(Context ctx) {
+    // wardId -> Ward, populated from ingestion-service on startup.
+    public static final Map<String, Ward> wards = new ConcurrentHashMap<>();
+
+    private static final HttpClient client = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(5))
+            .build();
+    private static final ObjectMapper objectMapper = new ObjectMapper();
+    private static final String ingestionApiUrl = "http://localhost:7030";
+
+    private WardServiceHandler() {
+    }
+
+    /** Fetches the cleaned ward list from ingestion-service and caches it. */
+    public static void loadWardsFromIngestion() {
         try {
             HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(ingestionApiUrl + "/"))
-                .GET()
-                .build();
-        
-            HttpResponse<String> response = client.send(
-                request, HttpResponse.BodyHandlers.ofString());
-            
-            List<Ward> wards = objectMapper.readValue(response.body(), new TypeReference<List<Ward>>() {});
-        
-            ctx.json(wards);
+                    .uri(URI.create(ingestionApiUrl + "/wards"))
+                    .GET()
+                    .build();
 
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            List<Ward> loaded = objectMapper.readValue(response.body(), new TypeReference<List<Ward>>() {});
+
+            wards.clear();
+            for (Ward ward : loaded) {
+                wards.put(ward.getWardId(), ward);
+            }
+            System.out.println("ward-service: loaded " + wards.size() + " wards from ingestion-service");
         } catch (Exception e) {
-            System.out.println("Error " + e.getMessage());
-        }
-        
-    }
-
-    public static void departments(Context ctx){
-        List<String> departments = new ArrayList<>();
-        for (Ward ward : WardServiceHandler.wards_list){
-            departments.add(ward.department());
-        }
-        String deps = String.join(",",departments);
-        ctx.json(deps);
-    }
-
-    public static void publishToWardQueue(Context ctx){
-        try (Connection connection = MqConfig.createConnection();
-              Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE)) {
-            
-            Destination destination = session.createQueue("ward-service-queue");
-            MessageProducer producer = session.createProducer(destination);
-
-            String jsonPayload = MqConfig.mapper.writeValueAsString(WardServiceHandler.faulty_equipment);
-            TextMessage message = session.createTextMessage(jsonPayload);
-
-            producer.send(message);
-            System.out.println("MQ has sent event " + " details to Equipment service");
-            ctx.status(200).json(Map.of("status","Passed faulty equipment"));
-
-            
-        } catch (Exception e) {
-            System.err.println("MQ failed to send equipment information");
+            System.out.println("ward-service: could not reach ingestion-service (" + e.getMessage()
+                    + ") - will retry lazily on next request");
         }
     }
 
-    public static void processSchedule(TextMessage message){
-        try {
-            String jsonText = message.getText();
-
-            Map<String, Object> scheduleMap = objectMapper.readValue(jsonText, new TypeReference<Map<String, Object>>(){});
-            int alertLevel = (int) scheduleMap.get("alertLevel");
-
-            Map<String, Object> wardMap = (Map<String, Object>) scheduleMap.get("ward");
-            String department = (String) scheduleMap.get("department");
-            List<Map<String, Object>> assignedDoctors = (List<Map<String, Object>>) wardMap.get("assignedDoctors");
-            String wing = (String) wardMap.get("wing");
-            String id = (String) wardMap.get("id");
-
-            Ward ward = new Ward(id, wing, department);
-            ward.setDoctors(assignedDoctors);
-            ward.setAlert(alertLevel);
-            WardServiceHandler.wards_list.add(ward);
-
-        } catch (Exception e) {
-            System.err.println("Could not process message");
+    public static void getWards(Context ctx) {
+        if (wards.isEmpty()) {
+            loadWardsFromIngestion();
         }
+        ctx.json(new ArrayList<>(wards.values()));
     }
 
-    public void checkFaultyEquipment(){
-        for (Ward ward : WardServiceHandler.wards_list){
-            if (!ward.faulty_equipment().isEmpty()){
-                WardServiceHandler.faulty_equipment.put(ward.getId(), ward.faulty_equipment());
+    public static void getWardById(Context ctx) {
+        if (wards.isEmpty()) {
+            loadWardsFromIngestion();
+        }
+        String id = ctx.pathParam("id").toUpperCase();
+        Ward ward = wards.get(id);
+        if (ward == null) {
+            ctx.status(404).json(Map.of("error", "unknown ward " + id));
+            return;
+        }
+        ctx.json(ward);
+    }
+
+    public static void departments(Context ctx) {
+        if (wards.isEmpty()) {
+            loadWardsFromIngestion();
+        }
+        TreeSet<String> departments = new TreeSet<>();
+        for (Ward ward : wards.values()) {
+            if (ward.getDepartment() != null) {
+                departments.add(ward.getDepartment());
             }
         }
+        ctx.json(new ArrayList<>(departments));
+    }
+
+    /**
+     * Records/updates a piece of equipment on a ward. Body: {"name": "...",
+     * "quantity": N, "damaged": true|false}. When a piece of equipment is
+     * newly reported damaged, publishes a guaranteed-delivery alert to the
+     * equipment-failure-queue for equipment-alert-service (stage 4).
+     */
+    public static void reportEquipment(Context ctx) {
+        String id = ctx.pathParam("id").toUpperCase();
+        Ward ward = wards.get(id);
+        if (ward == null) {
+            ctx.status(404).json(Map.of("error", "unknown ward " + id));
+            return;
+        }
+
+        Equipment equipment = ctx.bodyAsClass(Equipment.class);
+        ward.addEquipment(equipment);
+
+        if (equipment.isDamaged()) {
+            publishEquipmentFailure(ward, equipment);
+        }
+
+        ctx.status(200).json(Map.of("status", "equipment recorded", "faulty", ward.faultyEquipment()));
+    }
+
+    public static void getEquipment(Context ctx) {
+        String id = ctx.pathParam("id").toUpperCase();
+        Ward ward = wards.get(id);
+        if (ward == null) {
+            ctx.status(404).json(Map.of("error", "unknown ward " + id));
+            return;
+        }
+        ctx.json(ward.getEquipmentList());
+    }
+
+    private static void publishEquipmentFailure(Ward ward, Equipment equipment) {
+        try (Connection connection = MqConfig.createConnection()) {
+            Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
+            Destination destination = session.createQueue(MqConfig.QUEUE);
+            MessageProducer producer = session.createProducer(destination);
+            // Guaranteed delivery: persist the message so it survives a broker restart.
+            producer.setDeliveryMode(DeliveryMode.PERSISTENT);
+
+            Map<String, Object> alert = new LinkedHashMap<>();
+            alert.put("wardId", ward.getWardId());
+            alert.put("department", ward.getDepartment());
+            alert.put("equipment", equipment.getName());
+            alert.put("quantity", equipment.getQuantity());
+
+            String jsonPayload = MqConfig.mapper.writeValueAsString(alert);
+            TextMessage message = session.createTextMessage(jsonPayload);
+            producer.send(message);
+
+            System.out.println("ward-service: published equipment failure for " + equipment.getName()
+                    + " on ward " + ward.getWardId() + " to " + MqConfig.QUEUE);
+        } catch (Exception e) {
+            System.err.println("ward-service: failed to publish equipment failure - " + e.getMessage());
+        }
+    }
+
+    /**
+     * Applies a schedule/status change broadcast on staffing-events-topic
+     * (stage 3) to this service's in-memory ward record, so ward-service
+     * stays in sync without polling staffing-service.
+     */
+    @SuppressWarnings("unchecked")
+    public static void applyStaffingEvent(String json) {
+        try {
+            Map<String, Object> event = objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});
+            Object payloadObj = event.get("payload");
+            if (!(payloadObj instanceof Map)) {
+                return;
+            }
+            Map<String, Object> payload = (Map<String, Object>) payloadObj;
+
+            String wardId = String.valueOf(payload.get("wardId"));
+            Ward ward = wards.get(wardId);
+            if (ward == null) {
+                System.out.println("ward-service: staffing event for unknown ward " + wardId + " - ignoring");
+                return;
+            }
+
+            Object alertLevelObj = payload.get("alertLevel");
+            if (alertLevelObj instanceof Number) {
+                ward.setAlertLevel(((Number) alertLevelObj).intValue());
+            }
+
+            Object doctorsObj = payload.get("assignedDoctors");
+            if (doctorsObj instanceof List) {
+                List<String> names = new ArrayList<>();
+                for (Object d : (List<Object>) doctorsObj) {
+                    if (d instanceof Map) {
+                        Object name = ((Map<String, Object>) d).get("name");
+                        names.add(name != null ? String.valueOf(name) : String.valueOf(d));
+                    } else {
+                        names.add(String.valueOf(d));
+                    }
+                }
+                ward.setAssignedDoctors(names);
+            }
+
+            System.out.println("ward-service: applied staffing event ("
+                    + event.get("eventType") + ") for ward " + wardId);
+        } catch (Exception e) {
+            System.err.println("ward-service: could not process staffing event - " + e.getMessage());
+        }
     }
 }
-/*
-// 1. Convert the raw JSON string directly into a generic map
-Map<String, Object> scheduleMap = mapper.readValue(jsonText, Map.class);
-
-// 2. Extract top-level primitive values safely
-String department = (String) scheduleMap.get("department");
-int alertLevel = (int) scheduleMap.get("alertLevel");
-
-// 3. Extract the nested 'ward' object fields
-Map<String, Object> wardMap = (Map<String, Object>) scheduleMap.get("ward");
-String wardId = null; 
-if (wardMap != null) {
-    // Adapt this field name to whatever your specific Ward model properties are named
-    wardId = (String) wardMap.get("id"); 
-}
-
-// 4. Extract the nested list of 'assignedDoctors'
-List<Map<String, Object>> doctorsList = (List<Map<String, Object>>) scheduleMap.get("assignedDoctors");
-
-System.out.println("\n[Ward Service] --- New Schedule Event Interpreted ---");
-System.out.println("Target Ward ID: " + wardId);
-System.out.println("Department:     " + department);
-System.out.println("Alert Level:    " + alertLevel);
-System.out.println("Assigned Doctor Details:");
-
-if (doctorsList != null) {
-    for (Map<String, Object> doctor : doctorsList) {
-        // Unpack individual fields from each doctor object block
-        String doctorName = (String) doctor.get("name");
-        String specialty = (String) doctor.get("specialty");
-        System.out.println(" -> Doctor: " + doctorName + " (" + specialty + ")");
-    }
-} */
