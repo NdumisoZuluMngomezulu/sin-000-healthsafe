@@ -1,26 +1,45 @@
 package co.wethinkcode.healthsafe.model;
 
+/**
+ * A cleaned ward record, as exposed by IngestionServiceApp over REST for
+ * ward-service to consume. See ingestion-service/README.md for the cleaning
+ * rules applied to the raw wards-outdated.csv export.
+ */
 public class Ward {
-    private String ward_id;
+    private String wardId;
     private String wing;
     private String department;
-    private String available_beds;
+    private Integer bedsAvailable; // null when the source value was missing/invalid
+    private String notes;          // human-readable explanation when a field was flagged
 
-    public Ward(){}
-
-    public Ward(String id, String wing, String department, String beds){
-        this.ward_id = id;
-        this.wing = wing;
-        this.department = department;
-        this.available_beds = beds;
+    public Ward() {
     }
 
-    public String getId(){return this.ward_id;}
-    public String getWing(){return this.wing;}
-    public String department(){return this.department;}
-    public String available_beds(){return this.available_beds;}
-    public void setId(String id){this.ward_id = id;}
-    public void setWing(String wing){this.wing = wing;}
-    public void setDept(String dep){this.department = dep;}
-    public void setBed(String bed){this.available_beds = bed;}
+    public Ward(String wardId, String wing, String department, Integer bedsAvailable, String notes) {
+        this.wardId = wardId;
+        this.wing = wing;
+        this.department = department;
+        this.bedsAvailable = bedsAvailable;
+        this.notes = notes;
+    }
+
+    public String getWardId() { return wardId; }
+    public void setWardId(String wardId) { this.wardId = wardId; }
+
+    public String getWing() { return wing; }
+    public void setWing(String wing) { this.wing = wing; }
+
+    public String getDepartment() { return department; }
+    public void setDepartment(String department) { this.department = department; }
+
+    public Integer getBedsAvailable() { return bedsAvailable; }
+    public void setBedsAvailable(Integer bedsAvailable) { this.bedsAvailable = bedsAvailable; }
+
+    public String getNotes() { return notes; }
+    public void setNotes(String notes) { this.notes = notes; }
+
+    @Override
+    public String toString() {
+        return "Ward{" + wardId + ", " + wing + ", " + department + ", beds=" + bedsAvailable + "}";
+    }
 }
