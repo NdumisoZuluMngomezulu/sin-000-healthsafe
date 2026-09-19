@@ -20,7 +20,8 @@ public class EquipmentAlertHandler {
 
     private EquipmentAlertHandler() {
     }
-
+    
+    //ignore all unchecked warnings
     @SuppressWarnings("unchecked")
     public static void handle(String json) {
         try {
@@ -31,9 +32,7 @@ public class EquipmentAlertHandler {
                     + alert.get("wardId") + " [" + alert.get("department") + "]");
         } catch (Exception e) {
             System.out.println("Exception " + e.getMessage());
-        }
-       
-        
+        } 
     }
 
     public static void listAlerts(Context ctx) {
